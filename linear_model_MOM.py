@@ -149,8 +149,9 @@ class perceptronMOM_binary(BaseEstimator):
     '''
     def __init__(self,w0=None,K=10,eta0=1,epoch=100,mu=0.95,agg=1,compter=False,progress=False,verbose=True):
         self.w0=w0
-        self.coef=w0[:-1]
-        self.i0=w0[-1]
+        if self.w0:
+            self.coef=w0[:-1]
+            self.i0=w0[-1]
         self.K=K
         self.eta0=eta0
         self.epoch=epoch
@@ -194,9 +195,9 @@ class perceptronMOM_binary(BaseEstimator):
         self.w0=np.hstack([w,inter])
     def fit(self,x,Y):
         if not(self.w0):
-            self.w0=np.ones(len(x[0]))
-            self.coef=w0[:-1]
-            self.i0=w0[-1]
+            self.w0=np.ones(len(x[0])+1)
+            self.coef=self.w0[:-1]
+            self.i0=self.w0[-1]
 
         X=np.array(x).copy()
         y=np.array(Y).copy()
@@ -360,7 +361,7 @@ class logregMOM_binary(BaseEstimator):
 
     def fit(self,x,Y):
         if not(self.w0):
-            self.w0=np.ones(len(x[0]))
+            self.w0=np.ones(len(x[0])+1)
         y=np.array(Y).copy()
         self.values=np.sort(list(set(Y)))
         yj=y.copy()
