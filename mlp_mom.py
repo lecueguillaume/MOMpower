@@ -63,11 +63,7 @@ def MOM(x,blocks):
     indice=np.argsort(means_blocks)[int(np.ceil(len(means_blocks)/2))]
     return means_blocks[indice],indice
 
-
-
 class mlp_MOM(BaseEstimator):
-    '''Class for algorithm MLP MOM. Direct plug-in of sklearn MLP algo in a MOM framework. Contains the basic methods from sklearn: fit, predict, predict_proba.
-    '''
 
     '''MLP MOM classifier.
     Multi layer perceptron MOM risk minimization. MLP is a neural network that minimizes the log loss.
@@ -144,7 +140,7 @@ class mlp_MOM(BaseEstimator):
         for f in range(len(self.classes)):
             y[y==self.classes[f]]=f
 
-        clf=MLPClassifier(hidden_layer_sizes=self.shape,alpha=self.beta,learning_rate_init=self.eta0,solver='sgd',learning_rate='invscaling')
+        clf=MLPClassifier(hidden_layer_sizes=self.shape,alpha=self.beta,learning_rate_init=self.eta0)
         clf.partial_fit(x,Y,classes=self.classes)
         coefs=clf.coefs_
         intercepts=clf.intercepts_
