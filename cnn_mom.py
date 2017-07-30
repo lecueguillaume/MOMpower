@@ -61,16 +61,24 @@ def MOM(x,blocks):
     indice=np.argsort(means_blocks)[int(np.ceil(len(means_blocks)/2))]
     return means_blocks[indice],indice
 
-class mlp_MOM_image():
+class CNN_MOM():
 
-    '''MLP MOM classifier.
-    Multi layer perceptron MOM risk minimization. MLP is a neural network that minimizes the log loss.
+    '''CNN MOM classifier.
+    Convolutional neural network MOM risk minimization. 
     
     Parameters
     ----------
 
-    shape : list, length = n_layers -2, default (100,)
-        the i-th element represent the number of neurons in the i-th hidden layer.
+    channels : list of ints, length = n_layers, default [64,32],
+
+    filter_shape : list of ints, length = 2, default [5,5],
+        shape of the filter for the convolution layers.
+
+    pool_shape ; list of ints, length = 2, default [2,2],
+        shape of the pooling filter for the pooling layers.
+    
+    final_layer_shape : int, default 1000,
+        length of the final connected layer.
 
     K : int, default 10
         number of blocks for the computation of the MOM. A big value of K deals with more outliers but small values of K are better for the performance when there are no outliers.
@@ -124,13 +132,17 @@ class mlp_MOM_image():
 
     '''
 
-    def __init__(self,shape=[100],K=10,learning_rate=1e-3,beta=1e-4,epochs=100,batch_size = 1000,stddev=0.01,regex=False,save_file='graph_mlp.tf',epoch_count=50,num_classes=None):
+    def __init__(self,channels=[32,64],filter_shape=[5,5],pool_shape=[2,2],final_layer_shape=1000,K=10,learning_rate=1e-3,beta=1e-4,epochs=100,batch_size = 1000,stddev=0.01,regex=False,save_file='graph_cnn.tf',epoch_count=50,num_classes=None):
+        
         self.learning_rate=learning_rate
         self.beta=beta
         self.epochs=epochs
         self.batch_size=batch_size
         self.K=K
-        self.shape=shape
+        self.channels=channels
+        self.pool_shape=pool_shape
+        self.filter_shape=filter_shape
+        self.final_layer_shape=final_layer_shape
         self.stddev=stddev
         self.regex=regex
         self.save_file=save_file
@@ -155,40 +167,56 @@ class mlp_MOM_image():
         n_init=self.IMAGE_SIZE**2*3
         self.n_init=n_init
         x = tf.placeholder(tf.float32, [None,n_init])
+        x_shaped = tf.reshape(x, [-1, self.IMAGE_SIZE, self.IMAGE_SIZE, 3])
+        
         K=tf.constant(self.K)
         labels=self.one_hot(y_train)
         y = tf.placeholder(tf.float32, [None, self.num_classes])
-        shapes=[(n_init,self.shape[0])]+[(self.shape[f],self.shape[f+1]) for f in range(len(self.shape)-1)]+[(self.shape[-1],self.num_classes)]
-        W=[]
-        b=[]
-        for i in range(len(shapes)):
-            f,g = shapes[i]
-            W += [tf.Variable(tf.random_normal([f, g], stddev=self.stddev), name='W'+str(i))]
-            b += [tf.Variable(tf.random_normal([g]), name='b'+str(i))]
-        h =[tf.add(tf.matmul(x, W[0]), b[0])]
-        H = [tf.nn.relu(h[-1])]
-        for i in range(len(self.shape)-1):
-            h +=[tf.add(tf.matmul(H[i], W[i+1]), b[i+1])]
-            H += [tf.nn.relu(h[i+1])]
-        y_ = tf.nn.softmax(tf.add(tf.matmul(H[-1], W[-1]), b[-1]))
-        y_clipped = tf.clip_by_value(y_, 1e-10, 0.9999999)
-        perte = -tf.reduce_sum(y * tf.log(y_clipped)
-                         + (1 - y) * tf.log(1 - y_clipped), axis=1)
+        shapes=[(self.channels[f],self.channels[f+1]) for f in range(len(self.channels)-1)]
+
+        layer,w,b=self.create_new_conv_layer(x_shaped,3,self.channels[0],self.filter_shape,self.pool_shape,name='layer1')
+        L=[layer]
+        W=[w]
+        B=[b]
+        i=0
+        for f,g in shapes:
+            i+=1
+            layer,w,b=self.create_new_conv_layer(L[-1],f,g,self.filter_shape,self.pool_shape,name='layer'+str(i))
+            L+= [layer]
+            W+=[w]
+            B+=[b]
         
+        flattened=tf.contrib.layers.flatten(L[-1])
+
+        #n=tf.shape(flattened)[1]
+        n=self.IMAGE_SIZE
+        for f in range(len(self.channels)):
+            n=np.ceil(n/2)
+        
+        n=int(self.channels[-1]*n**2)
+        wf1 = tf.Variable(tf.truncated_normal([n, self.final_layer_shape], stddev=self.stddev), name='wf1')
+        bf1 = tf.Variable(tf.truncated_normal([self.final_layer_shape], stddev=self.stddev), name='bf1')
+        dense_layer1 = tf.matmul(flattened, wf1) + bf1
+        dense_layer1 = tf.nn.relu(dense_layer1)
+
+        wf2 = tf.Variable(tf.truncated_normal([self.final_layer_shape, self.num_classes], stddev=self.stddev), name='wf2')
+        bf2 = tf.Variable(tf.truncated_normal([self.num_classes], stddev=self.stddev), name='bf2')
+        dense_layer2 = tf.matmul(dense_layer1, wf2) + bf2
+
+        y_ = tf.nn.softmax(dense_layer2)
+        perte = tf.nn.softmax_cross_entropy_with_logits(logits=dense_layer2, labels=y)
         for i in range(len(W)):
             perte=tf.add(perte,self.beta*tf.nn.l2_loss(W[i]))
-        cross_entropy=tf.reduce_mean(perte)
-     
+
+        cross_entropy = tf.reduce_mean(perte)
+
         optimiser = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(cross_entropy)
-        correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
         #print(tf.all_variables())
-        saver = tf.train.Saver(W+b)
+        saver = tf.train.Saver(W+B+[wf1,wf2,bf1,bf2])
         init_op = tf.global_variables_initializer()
         with tf.Session() as sess:
             sess.run(init_op)
-
             # Training
-             
             for epoch in range(self.epochs):
                 generator_x=self.generate_image(input_files_train,self.batch_size)
                 cost = []
@@ -201,7 +229,6 @@ class mlp_MOM_image():
                         batch_y=labels[(self.batch_size*batch):]
                     blocks=blockMOM(self.K,batch_y)
                     losses=sess.run(perte,feed_dict={x: batch_x,y: batch_y})
-                    
                     
                     risk,block_MOM=MOM(losses,blocks)
                     batch+=1
@@ -218,7 +245,36 @@ class mlp_MOM_image():
             print('Weights saved in '+self.save_file)
         tf.reset_default_graph()
 
+    def create_new_conv_layer(self,input_data, num_input_channels, num_filters, filter_shape, pool_shape, name):
+        # setup the filter input shape for tf.nn.conv_2d
+        conv_filt_shape = [filter_shape[0], filter_shape[1], num_input_channels,
+                          num_filters]
+
+        # initialise weights and bias for the filter
+        weights = tf.Variable(tf.truncated_normal(conv_filt_shape, stddev=self.stddev),
+                                          name=name+'_W')
+        bias = tf.Variable(tf.truncated_normal([num_filters]), name=name+'_b')
+
+        # setup the convolutional layer operation
+        out_layer = tf.nn.conv2d(input_data, weights, [1, 1, 1, 1], padding='SAME')
+
+        # add the bias
+        out_layer += bias
+
+        # apply a ReLU non-linear activation
+        out_layer = tf.nn.relu(out_layer)
+
+        # now perform max pooling
+        ksize = [1, 2, 2, 1]
+        strides = [1, 2, 2, 1]
+        out_layer = tf.nn.max_pool(out_layer, ksize=ksize, strides=strides, 
+                                   padding='SAME')
+
+        return out_layer,weights,bias
+
     def predict_proba(self,input_files_test):
+
+
         tf.reset_default_graph()
         gen_tensor=self.distort_input(input_files_test)
 
@@ -228,27 +284,47 @@ class mlp_MOM_image():
             filepaths=input_files_test
         image1=imread(filepaths[0])
         self.n_init=self.IMAGE_SIZE**2*3
-
-        x = tf.placeholder(tf.float32, [None,self.n_init ])
-        y = tf.placeholder(tf.float32, [None, self.num_classes])
+        
+        x = tf.placeholder(tf.float32, [None,self.n_init])
+        x_shaped = tf.reshape(x, [-1, self.IMAGE_SIZE, self.IMAGE_SIZE, 3])
+        
         K=tf.constant(self.K)
-        shapes=[(self.n_init,self.shape[0])]+[(self.shape[f],self.shape[f+1]) for f in range(len(self.shape)-1)]+[(self.shape[-1],self.num_classes)]
-        W=[]
-        b=[]
-        for i in range(len(shapes)):
-            f,g = shapes[i]
-            W += [tf.Variable(tf.random_normal([f, g], stddev=self.stddev), name='W'+str(i))]
-            b += [tf.Variable(tf.random_normal([g]), name='b'+str(i))]
-        h =[tf.add(tf.matmul(x, W[0]), b[0])]
-        H = [tf.nn.relu(h[-1])]
-        for i in range(len(self.shape)-1):
-            h +=[tf.add(tf.matmul(H[i], W[i+1]), b[i+1])]
-            H += [tf.nn.relu(h[i+1])]
-        y_ = tf.nn.softmax(tf.add(tf.matmul(H[-1], W[-1]), b[-1]))
-        y_clipped = tf.clip_by_value(y_, 1e-10, 0.9999999)
+        y = tf.placeholder(tf.float32, [None, self.num_classes])
+        shapes=[(self.channels[f],self.channels[f+1]) for f in range(len(self.channels)-1)]
+
+        layer,w,b=self.create_new_conv_layer(x_shaped,3,self.channels[0],self.filter_shape,self.pool_shape,name='layer1')
+        L=[layer]
+        W=[w]
+        B=[b]
+        i=0
+        for f,g in shapes:
+            i+=1
+            layer,w,b=self.create_new_conv_layer(L[-1],f,g,self.filter_shape,self.pool_shape,name='layer'+str(i))
+            L+= [layer]
+            W+=[w]
+            B+=[b]
+          
+        flattened=tf.contrib.layers.flatten(L[-1])
+        
+        n=self.IMAGE_SIZE
+        for f in range(len(self.channels)):
+            n=np.ceil(n/2)
+        
+        n=int(self.channels[-1]*n**2)
+        
+        wf1 = tf.Variable(tf.truncated_normal([n, self.final_layer_shape], stddev=self.stddev), name='wf1')
+        bf1 = tf.Variable(tf.truncated_normal([self.final_layer_shape], stddev=self.stddev), name='bf1')
+        dense_layer1 = tf.matmul(flattened, wf1) + bf1
+        dense_layer1 = tf.nn.relu(dense_layer1)
+
+        wf2 = tf.Variable(tf.truncated_normal([self.final_layer_shape, self.num_classes], stddev=self.stddev), name='wf2')
+        bf2 = tf.Variable(tf.truncated_normal([self.num_classes], stddev=self.stddev), name='bf2')
+        dense_layer2 = tf.matmul(dense_layer1, wf2) + bf2
+
+        y_ = tf.nn.softmax(dense_layer2)
 
         #Prediction
-        saver = tf.train.Saver(W+b)
+        saver = tf.train.Saver(W+B+[wf1,wf2,bf1,bf2])
 
         images=self.generate_image(input_files_test,None,True)
         with tf.Session() as sess:
@@ -256,7 +332,7 @@ class mlp_MOM_image():
             for image in images:
                 xtest=sess.run(gen_tensor,feed_dict={self.image: image})
 
-                pred=sess.run(y_clipped,feed_dict={x: xtest})
+                pred=sess.run(y_,feed_dict={x: xtest})
             return pred
         tf.reset_default_graph()
 
@@ -293,7 +369,6 @@ class mlp_MOM_image():
         for filepath in filepaths:
             image = imread(filepath).astype(np.float) 
             im= 0.2126*image[:,:,0]+0.7152*image[:,:,1]+0.0722*image[:,:,2]
-
             images[idx, :]=im.reshape([np.shape(image1)[0]*np.shape(image1)[1]])
             # Images for inception classifier are normalized to be in [-1, 1] interval.
             filenames.append(os.path.basename(filepath))
