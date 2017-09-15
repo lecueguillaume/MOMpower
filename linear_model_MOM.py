@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator,clone
 from sklearn.multiclass import OneVsRestClassifier,OneVsOneClassifier
 import time
+import inspect
 
 
 class progressbar():
@@ -129,6 +130,10 @@ class perceptronMOM(BaseEstimator):
 
     def __init__( self,w0=None,K=10,eta0=1,epoch=100,mu=0.95,agg=1,compter=False,progress=False, verbose = True, multi='ovr'):
         binary_clf=perceptronMOM_binary(w0,K,eta0,epoch,mu,agg,compter,progress,verbose)
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        values.pop("self")
+        for arg, val in values.items():
+            setattr(self, arg, val)
         if multi=="ovr":
             self.clf=OneVsRestClassifier(binary_clf)
         elif multi=="ovo":
@@ -137,10 +142,16 @@ class perceptronMOM(BaseEstimator):
             raise NameError('Multiclass meta-algorithm not known')
     def fit(self,X,y):
         self.clf.fit(X,y)
+        return self
     def predict(self,X):
         return self.clf.predict(X)
     def predict_proba(self,X):
         return self.clf.predict_proba(X)
+    def score(self,X,y):
+        return np.mean(self.predict(X)==y)
+    def set_params(self,**params):
+        self.__init__(**params)
+        return self
 
 class perceptronMOM_binary(BaseEstimator):
     '''Class for algorithm perceptron MOM RM. 
@@ -149,7 +160,7 @@ class perceptronMOM_binary(BaseEstimator):
     '''
     def __init__(self,w0=None,K=10,eta0=1,epoch=100,mu=0.95,agg=1,compter=False,progress=False,verbose=True):
         self.w0=w0
-        if self.w0:
+        if self.w0 is not None:
             self.coef=w0[:-1]
             self.i0=w0[-1]
         self.K=K
@@ -194,8 +205,8 @@ class perceptronMOM_binary(BaseEstimator):
         self.inter=inter
         self.w0=np.hstack([w,inter])
     def fit(self,x,Y):
-        if not(self.w0):
-            self.w0=np.ones(len(x[0])+1)
+        if self.w0 is None:
+            self.w0=np.zeros(len(x[0])+1)
             self.coef=self.w0[:-1]
             self.i0=self.w0[-1]
 
@@ -234,7 +245,6 @@ class perceptronMOM_binary(BaseEstimator):
     def score(self,x,y):
         pred=self.predict(x)
         return np.mean(pred==y)
-
 
 class logregMOM(BaseEstimator):
     '''Logistic Regression MOM classifier.
@@ -300,40 +310,52 @@ class logregMOM(BaseEstimator):
         returns matrix, size = (n_samples,n_class)
         
     '''
-    def __init__(self,w0=None,K=10,eta0=1,beta=1,epoch=200,agg=3,compter=False,progress=False,verbose=True,multi='ovr'):
-        binary_clf=logregMOM_binary(w0,K,eta0,beta,epoch,agg,compter,progress,verbose)
+    def __init__(self,w0=None,K=10,eta0=1,beta=1,epoch=200,agg=3,compter=False,progress=False,verbose=True,multi='ovr',augmenter=2,power=2/3):
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        values.pop("self")
+        for arg, val in values.items():
+            setattr(self, arg, val)
+
+        binary_clf=logregMOM_binary(w0,K,eta0,beta,epoch,agg,compter,progress,verbose,power)
         if multi=="ovr":
             self.clf=OneVsRestClassifier(binary_clf)
         elif multi=="ovo":
             self.clf=OneVsOneClassifier(binary_clf)
         else:
-            raise NameError('Multiclass meta-algorithm not known')
+            #print("Multiclass meta-algorithm not known, choosing 'ovr'")
+            self.clf=OneVsRestClassifier(binary_clf)
+
+
     def fit(self,X,y):
-        self.clf.fit(X,y)
+        perm=np.array([])
+        for f in range(self.augmenter):
+            perm=np.hstack([perm,np.random.permutation(len(X))])
+        perm=perm.astype(np.int64)
+        self.clf.fit(X[perm],y[perm])
+        return self
     def predict(self,X):
         return self.clf.predict(X)
-    def predict_proba(X):
+    def predict_proba(self,X):
         return self.clf.predict_proba(X)
+    def score(self,X,y):
+        return np.mean(self.predict(X)==y)
+    def set_params(self,**params):
+        self.__init__(**params)
+        return self
 
 class logregMOM_binary(BaseEstimator):
     '''Class of the binary classification for the logistic regression MOM.
     '''
-    def __init__(self,w0=None,K=10,eta0=1,beta=1,epoch=200,agg=3,compter=False,progress=False,verbose=True):
-        self.w0=w0
-        self.K=K
-        self.eta0=eta0
-        self.beta=beta
-        self.epoch=epoch
-        self.agg=agg
-        self.compter=compter
-        self.progress=progress
-        self.verbose=verbose
-
+    def __init__(self,w0=None,K=10,eta0=1,beta=1,epoch=200,agg=3,compter=False,progress=False,verbose=True,power=2/3):
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        values.pop("self")
+        for arg, val in values.items():
+            setattr(self, arg, val)
     def fit1(self,x,Y):
         w=np.array(self.w0)
         X=np.hstack([np.array(x),np.ones(len(x)).reshape(len(x),1)])
 
-        pas=lambda i : 1/(1+self.eta0*i)**(2/3)
+        pas=lambda i : 1/(1+self.eta0*i)**self.power
         if self.compter:
             self.counts=np.zeros(len(X))
         compteur=1
@@ -343,7 +365,7 @@ class logregMOM_binary(BaseEstimator):
         for f in range(self.epoch):
             if self.progress:
                 Bar.update(f)
-            losses=self.perte(X,Y,w) 
+            losses=self.perte(X,Y,w)
             blocks=blockMOM(self.K,X)
 
             compteur+=1
@@ -356,12 +378,13 @@ class logregMOM_binary(BaseEstimator):
             w=w*(1-pas(f))+pas(f)*np.linalg.inv(np.transpose(Xb).dot(D).dot(Xb)+self.beta*np.eye(len(X[0]))).dot(np.transpose(Xb).dot(yb-eta)-self.beta*w)
             if self.compter:
                 self.counts[blocks[b]]+=1
+
             
         return w
 
     def fit(self,x,Y):
-        if not(self.w0):
-            self.w0=np.ones(len(x[0])+1)
+        if self.w0 is None:
+            self.w0=np.zeros(len(x[0])+1)
         y=np.array(Y).copy()
         self.values=np.sort(list(set(Y)))
         yj=y.copy()

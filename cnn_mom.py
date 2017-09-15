@@ -2,7 +2,7 @@ import numpy as np
 from scipy.misc import imread
 import tensorflow as tf
 import os
-
+import time
 
 class progressbar():
     '''Just a simple progress bar.
@@ -217,6 +217,7 @@ class CNN_MOM():
         with tf.Session() as sess:
             sess.run(init_op)
             # Training
+            a=time.time()
             for epoch in range(self.epochs):
                 generator_x=self.generate_image(input_files_train,self.batch_size)
                 cost = []
@@ -239,7 +240,7 @@ class CNN_MOM():
                                   feed_dict={x: batch_x, y: batch_y})
                     cost += [c]
                 if epoch % self.epoch_count ==0:
-                    print("Epoch:", (epoch+1 ), "cost =", "{:.3f}".format(np.mean(cost)))
+                    print("Epoch:", (epoch+1 ), "cost =", "{:.3f}".format(np.mean(cost)),' en environ ',(time.time()-a),'s')
 
             saver.save(sess, self.save_file);
             print('Weights saved in '+self.save_file)

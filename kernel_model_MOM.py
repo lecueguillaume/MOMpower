@@ -3,6 +3,7 @@ from sklearn.base import BaseEstimator,clone
 from sklearn.multiclass import OneVsRestClassifier,OneVsOneClassifier
 from sklearn.metrics.pairwise import rbf_kernel,polynomial_kernel
 import time
+import inspect
 
 
 class progressbar():
@@ -134,8 +135,13 @@ class log_kernel_MOM(BaseEstimator):
         returns matrix, size = (n_samples,n_class)
         
     '''
-    def __init__(self,K=10,eta0=1,beta=1,epoch=200,kernel='rbf',gamma=None,degree=3,agg=1,verbose=True,progress=False,compter=False,multi='ovr'):
-        binary_clf=log_kernel_MOM_binary(K,eta0,beta,epoch,kernel,gamma,degree,agg,verbose,progress,compter)
+    def __init__(self,K=10,eta0=1,beta=1,epoch=200,kernel='rbf',gamma=None,degree=3,agg=1,verbose=True,progress=False,compter=False,multi='ovr',augmenter=1,power=2/3):
+
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        values.pop("self")
+        for arg, val in values.items():
+            setattr(self, arg, val)
+        binary_clf=log_kernel_MOM_binary(K,eta0,beta,epoch,gamma,degree,agg,verbose,progress,compter,power)
         if multi=="ovr":
             self.clf=OneVsRestClassifier(binary_clf)
         elif multi=="ovo":
@@ -143,12 +149,47 @@ class log_kernel_MOM(BaseEstimator):
         else:
             raise NameError('Multiclass meta-algorithm not known')
     def fit(self,X,y):
-        self.clf.fit(X,y)
-    def predict(self,X):
-        return self.clf.predict(X)
-    def predict_proba(X):
-        return self.clf.predict_proba(X)
+        self.X=X
+        perm=np.array([])
+        if (self.kernel=='poly'):
+           kfunc=lambda x,y : polynomial_kernel(x,y,degree=self.degree,gamma=self.gamma)
+        elif(self.kernel=='rbf'):
+           kfunc=lambda x,y : rbf_kernel(x,y,self.gamma)
+        else :
+           kfunc=self.kernel
+        Kernel=kfunc(np.array(X),np.array(X))
 
+        for f in range(self.augmenter):
+            perm=np.hstack([perm,np.random.permutation(len(X))])
+        self.perm=perm.astype(np.int64)
+        
+        self.clf.fit(Kernel[self.perm][:,self.perm],y[self.perm])
+        return self
+    def predict(self,xtest):
+        
+        if (self.kernel=='poly'):
+           kfunc=lambda x,y : polynomial_kernel(x,y,degree=self.degree,gamma=self.gamma)
+        elif(self.kernel=='rbf'):
+           kfunc=lambda x,y : rbf_kernel(x,y,self.gamma)
+        else :
+           kfunc=self.kernel
+        KC=kfunc(xtest,self.X[self.perm])
+        return self.clf.predict(KC)
+    def predict_proba(xtest):
+        
+        if (self.kernel=='poly'):
+           kfunc=lambda x,y : polynomial_kernel(x,y,degree=self.degree,gamma=self.gamma)
+        elif(self.kernel=='rbf'):
+           kfunc=lambda x,y : rbf_kernel(x,y,self.gamma)
+        else :
+           kfunc=self.kernel
+        KC=kfunc(xtest,self.X[self.perm])
+        return self.clf.predict_proba(KC)
+    def score(self,X,y):
+        return np.mean(self.predict(X)==y)
+    def set_params(self,**params):
+        self.__init__(**params)
+        return self
 
 class log_k():
     '''Class of KLR
@@ -178,53 +219,36 @@ class log_k():
         alphaf[blocks[b]]=alpha
         return alphaf
 
-
 class log_kernel_MOM_binary(BaseEstimator):
-    def __init__(self,K=10,eta0=1,beta=1,epoch=200,kernel='rbf',gamma=None,degree=3,agg=1,verbose=True,progress=False,compter=False):
-       self.K=K
-       self.eta0=eta0
-       self.beta=beta
-       self.epoch=epoch
-       self.gamma=gamma
-       self.agg=agg
-       self.kernel=kernel
-       self.degree=degree
-       self.verbose=verbose
-       self.progress=progress
-       self.compter=compter
+    def __init__(self,K=10,eta0=1,beta=1,epoch=200,gamma=None,degree=3,agg=1,verbose=True,progress=False,compter=False,power=3/4):
+
+       args, _, _, values = inspect.getargvalues(inspect.currentframe())
+       values.pop("self")
+       for arg, val in values.items():
+           setattr(self, arg, val)
        
-    def fit1(self,X,y,Kernel):
-        self.X=np.array(X)
-        X=self.X
-        pas=lambda i : 1/(1+self.eta0*i)
+    def fit1(self,y,Kernel):
+        pas=lambda i : 1/(1+self.eta0*i)**self.power
         clf=log_k(y,self.beta)
         if self.progress:
             Bar=progressbar(self.epoch)
         if self.compter:
-            self.counts=np.zeros(len(X))
-        alpha=np.zeros(len(X))
+            self.counts=np.zeros(len(Kernel))
+        alpha=np.zeros(len(Kernel))
         res=[]
         for f in range(self.epoch):
             if self.progress:
                 Bar.update(f)
-            blocks=blockMOM(self.K,X)
+            blocks=blockMOM(self.K,Kernel)
             losses=self.perte(Kernel,y,alpha)
             risque,b=MOM(losses,blocks)
             alpha=clf.irlsk(b,blocks,alpha,pas(f),Kernel)
             self.alpha=alpha
+#            if f % 10 ==0:
+#                print("epoch ", f, " risque ",risque)
             if self.compter:
                 self.counts[blocks[b]]+=1
-        pred=Kernel.dot(self.alpha)
-        self.separatrice=np.mean([np.median(pred[y==1]),np.median(pred[y!=1])])
-        
-    def fit(self,X,Y):
-        if (self.kernel=='poly'):
-           kfunc=lambda x,y : polynomial_kernel(x,y,degree=self.degree,gamma=self.gamma)
-        elif(self.kernel=='rbf'):
-           kfunc=lambda x,y : rbf_kernel(x,y,self.gamma)
-        else :
-           kfunc=self.kernel
-        Kernel=kfunc(np.array(X),np.array(X))
+    def fit(self,Kernel,Y):
 
         self.values=np.sort(list(set(Y)))
         yj=np.array(Y).copy()
@@ -233,42 +257,28 @@ class log_kernel_MOM_binary(BaseEstimator):
         yj[indmu]=0
         yj[indu]=1
 
-        alpha=np.zeros(len(X))
+        alpha=np.zeros(len(Kernel))
         for f in range(self.agg):
             if self.verbose and self.agg != 1:
                 print('Passage '+str(f))
-            self.fit1(X,yj,Kernel)
+            self.fit1(yj,Kernel)
             alpha+=self.alpha
         self.alpha=alpha/self.agg
+        preds=Kernel.dot(self.alpha)
+        self.separatrice=np.mean([np.median(preds[yj==0]),np.median(preds[yj==1])])
 
     def perte(self,K,y,alpha):
         Kalpha=K.dot(alpha)
         return np.log(1+np.exp(-(2*np.array(y)-1)*Kalpha))+self.beta/2*np.sum(alpha*Kalpha)
    
-    def predict(self,xtest):
-        
-        if (self.kernel=='poly'):
-           kfunc=lambda x,y : polynomial_kernel(x,y,degree=self.degree,gamma=self.gamma)
-        elif(self.kernel=='rbf'):
-           kfunc=lambda x,y : rbf_kernel(x,y,self.gamma)
-        else :
-           kfunc=self.kernel
-        KC=kfunc(xtest,self.X)
-        pred=(np.floor(KC.dot(self.alpha)>=self.separatrice)).reshape(len(xtest))
+    def predict(self,KC):
+        pred=(np.floor(KC.dot(self.alpha)>=self.separatrice)).reshape(len(KC))
         return np.array([self.values[int(p)] for p in pred])
 
-    def predict_proba(self,x):
-        if (self.kernel=='poly'):
-           kfunc=lambda x,y : polynomial_kernel(x,y,degree=self.degree,gamma=self.gamma)
-        elif(self.kernel=='rbf'):
-           kfunc=lambda x,y : rbf_kernel(x,y,self.gamma)
-        else :
-           kfunc=self.kernel
-        KC=kfunc(x,self.X)
+    def predict_proba(self,KC):
         pred=KC.dot(self.alpha)-self.separatrice
         pred=1/(1+np.exp(-pred))
         return np.array([[1-p,p] for p in pred])
-
 
 class log_kernel_MOM_fast(BaseEstimator):
     ''' Fast Logistic Regression Kernel MOM
@@ -343,8 +353,12 @@ class log_kernel_MOM_fast(BaseEstimator):
 
 
 
-    def __init__(self,K=10,eta0=1,beta=1,epoch=300,kernel='rbf',gamma=None,degree=3,agg=1,progress=False,multi='ovr'):
-        binary_clf=log_kernel_MOM_fast_binary(K,eta0,beta,epoch,kernel,gamma,degree,agg,progress)
+    def __init__(self,K=10,eta0=1,beta=1,epoch=300,kernel='rbf',gamma=None,degree=3,agg=1,progress=False,multi='ovr',augmenter=1,power=2/3):
+        binary_clf=log_kernel_MOM_fast_binary(K,eta0,beta,epoch,kernel,gamma,degree,agg,progress,power)
+        args, _, _, values = inspect.getargvalues(inspect.currentframe())
+        values.pop("self")
+        for arg, val in values.items():
+            setattr(self, arg, val)
         if multi=="ovr":
             self.clf=OneVsRestClassifier(binary_clf)
         elif multi=="ovo":
@@ -352,11 +366,21 @@ class log_kernel_MOM_fast(BaseEstimator):
         else:
             raise NameError('Multiclass meta-algorithm not known')
     def fit(self,X,y):
-        self.clf.fit(X,y)
+        perm=np.array([])
+        for f in range(self.augmenter):
+            perm=np.hstack([perm,np.random.permutation(len(X))])
+        perm=perm.astype(np.int64)
+        self.clf.fit(X[perm],y[perm])
+        return self
     def predict(self,X):
         return self.clf.predict(X)
     def predict_proba(X):
         return self.clf.predict_proba(X)
+    def score(self,X,y):
+        return np.mean(self.predict(X)==y)
+    def set_params(self,**params):
+        self.__init__(**params)
+        return self
 
 class log_k2():
     '''Class of KLR
@@ -386,21 +410,16 @@ class log_k2():
         return alphaf
 
 class log_kernel_MOM_fast_binary(BaseEstimator):
-    def __init__(self,K=10,eta0=1,beta=1,epoch=300,kernel='rbf',gamma=None,degree=3,agg=1,progress=False):
-       self.K=K
-       self.eta0=eta0
-       self.beta=beta
-       self.epoch=epoch
-       self.gamma=gamma
-       self.agg=agg
-       self.kernel=kernel
-       self.degree=degree
-       self.progress=False
-       
+    def __init__(self,K=10,eta0=1,beta=1,epoch=300,kernel='rbf',gamma=None,degree=3,agg=1,progress=False,power=2/3):
+       args, _, _, values = inspect.getargvalues(inspect.currentframe())
+       values.pop("self")
+       for arg, val in values.items():
+           setattr(self, arg, val)
+           
     def fit1(self,X,y,Kernelblocks):
         self.X=np.array(X).copy()
         X=self.X
-        pas=lambda i : 1/(1+self.eta0*i)
+        pas=lambda i : 1/(1+self.eta0*i)**self.power
         clf=log_k2(y,self.beta)
         
         alpha=np.zeros(len(X))
@@ -417,7 +436,6 @@ class log_kernel_MOM_fast_binary(BaseEstimator):
             self.alpha=alpha
         pred=self.decision_function(X)
         self.separatrice=np.mean([np.median(pred[y==1]),np.median(pred[y!=1])])
-
 
     def fit(self,X,Y):
         if (self.kernel=='poly'):
