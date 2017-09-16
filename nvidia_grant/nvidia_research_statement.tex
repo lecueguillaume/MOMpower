@@ -1,17 +1,54 @@
-Please review the GPU Grant Program website for full program details before submitting this form. All current updates to the program are posted there first. https://developer.nvidia.com/academic_gpu_seeding Professors, Researchers and Advisors should complete this online form to request a GPU for research purposes for themselves and/or their teams.In order to review your request, we require a statement of research summary and CV. Additional materials should not be used to attach a full proposal in lieu of a statement of research. Your statement of research must include the following:
-
-- contact information
+- contact information:
+Guillaume Lecue
+ENSAE - CREST
+Bureau 3029
+5 avenue Henry Le Chatelier
+91120 Palaisea
+Tel: 0033 1 70 26 68 57
 
 - a short description of your research project(s)
 
-- how you and/or your team will use the GPU
+Recent technological developments have allowed companies and state organizations to collect and store huge datasets. 
+These yield amazing achievements in artificial intelligence such as self driving cars or softwares defeating humans in highly complex games such as chess or Go. 
+ 
+Big datasets have also challenged scientists in statistics and computer science to develop new methods. 
+In particular, Machine Learning has attracted a lot of attention over the past few years. Machine learning can be seen as a branch of statistical learning dealing with large datasets where any proposed procedures besides presenting optimal statistical guarantees should be provided with at least a tractable algorithm to implement it in practice. 
 
-- list of recent publications
 
-GPU Grant Requests are reviewed and notification takes place on a bi-weekly basis.There is a limit of (1) GPU grant per person, per year.
+Our theoretical understanding of many classical procedures of machine learning such as LASSO heavily rely on two assumptions on the data, that should both be i.i.d. and have nice sub-gaussian behaviors. As noted by many practitioners, ``data from real-world experiments oftentimes tend to be corrupted with outliers and/or exhibit heavy tails". For example, in finance, heavy-tailed processes are routinely used and, in biology or medical experiments datasets are regularly subject to some corruption by outliers. These outliers are even in some applications the data of actual interests, one can think of fraud detections for example. The need for robust procedures in data science can be appreciated, for instance, by the recently posted challenges on ``kaggle'', the most popular data science competition platform. The 1.5 million dollars problem ``Passenger Screening Algorithm Challenge'' is about to find terrorist activity from 3D images. The ``NIPS 2017: Defense Against Adversarial Attack'' is about constructing algorithms robust to adversarial data.
 
-We currently offer Jetson TX1/Jetson TX2 Developer Kit {if available in your region}, GeForce Titan Xp, and Quadro P5000 {if available in your region otherwise M5000}. We do not have a Tesla option - Tesla should not be selected in the drop down.
 
-Students should not submit GPU Grant Requests. All submissions must come from a Professor, Researcher or Advisor. If you have multiple students interested in using GPUs for their research, one submission should be made for your group keeping in mind the overall goals for the next year. NVIDIA GPU grants are small "seeding" gifts intended to enable researchers to begin a new project and gain the preliminary results to support a larger proposal to other funding agencies. Our goal is "breadth-first" seeding and grants are for (1) GPU. Since NVIDIA does not make complete computer systems, we do not donate them. We also do not grant large quantities of equipment or server rack mountable GPUs. If you request more than one GPU for your research or your team, be sure to clearly explain why multiple GPUs are needed in your proposal. Check out our GPU Educators Program (https://developer.nvidia.com/educators) for details on educational resources.
 
-Please provide an accurate and complete FedEx/DHL acceptable shipping address and phone number in the form below. The address provided will be EXACTLY where the GPU grants are shipped. No special characters and only address details for the fields {ie. don't add country to the street address, don't add university to the street address) and only details for one street address per line {ie. don't put the entire street address, City, State, Zip on a street address line}. Please do not add the + sign to any phone numbers. If this information is incomplete in any way, the submission will be declined or delayed - double check for accuracy!
+It is easy to check that most routinely used algorithms are absolutely non-robust to the presence of even one outlier. This is the case of the standard least-squares estimator or its ell_1 penalized version known as LASSO for example as one can see on basic simulations just by adding a single outlier to a dataset. LASSO is not an isolated example, most algorithms are actually designed to approximate minimizers of penalized empirical loss and empirical means of unbounded functions are highly sensitive to corrupted data. 
+Even though in statistics, building robust estimators has been an issue for a long time, at least since the work of John Tukey, Frank Hampel and Peter Huber, this question has not been satisfactorily answered yet.
+
+In a recent paper (cf. [1]), we proved that a learning procedure using a Median of Means (MOM) approach completely solved the robustness problem in Machine Learning.  Most surprisingly is that this procedure comes with an algorithm: it is some sort of alternating minimaximization block gradient descent algorithm where the block of data along which the iteration is descending (or ascending) is chosen according to its "centrality" (measured via a  median operator). We have been running our algorithms on simulated datasets for various regression and classification problems in high-dimensions. The robustness of these procedures and there ability to detect outliers are amazing.
+
+We have been constructing MOM versions of very classical Deep learning networks like CNN and MLP. We compared the robustness of these new MOM procedures to the one of the classical deep learning architectures (via keras). Once again the MOM version the CNN are very robust to various sort of outliers. We learned the robust architectures on the tiny-imagenet database which is 10.000 times smaller than the actual imagenet database. 
+
+If our Nvidia grant application works, we will be using the GPU to construct robust deep learning architectures  for instance on imagenet. The aim is to be robust to various corruption of images and to wrong labeling. We therefore apply for the Nvidia GPU grant for research purposes for our team. 
+
+Our team on MOM estimators is just at its beginning. It is made for the moment of two researchers (G. Lecue and M. Lerasle) and two Ph.D. student (G. Chinot and T. Mathieu). We will use the GPU together with TensorFlow and share it among the team. The results we will get will be used to write research articles and to support future grant applications at both national and European levels.
+
+
+
+- list of recent publications:
+[1] G. Lecué and M. Lerasle
+Robust learning from MOM’s principles: theory and practice
+Under preparation, 2017.
+
+G. Lecué and M. Lerasle
+Learning from MOM’s principles: Le Cam’s approach
+Submitted, 2017.
+
+S. Foucart and G. Lecué
+An IHT algorithm for sparse recovery from subexponential measurements
+IEEE Signal Processing Letters (9) 24, 2017.
+
+G. Lecué and S. Mendelson
+Regularization and the small-ball method II: complexity dependent error rates
+Under revision in JMLR, 2016.
+
+G. Lecué and S. Mendelson
+Regularization and the small-ball method I: sparse recovery
+To appear in the Annals of Statistics, 2016.
