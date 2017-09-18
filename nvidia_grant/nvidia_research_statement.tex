@@ -1,0 +1,54 @@
+- contact information:
+Guillaume Lecue
+ENSAE - CREST
+Bureau 3029
+5 avenue Henry Le Chatelier
+91120 Palaisea
+Tel: 0033 1 70 26 68 57
+
+- a short description of your research project(s)
+
+Recent technological developments have allowed companies and state organizations to collect and store huge datasets. 
+These yield amazing achievements in artificial intelligence such as self driving cars or softwares defeating humans in highly complex games such as chess or Go. 
+ 
+Big datasets have also challenged scientists in statistics and computer science to develop new methods. 
+In particular, Machine Learning has attracted a lot of attention over the past few years. Machine learning can be seen as a branch of statistical learning dealing with large datasets where any proposed procedures besides presenting optimal statistical guarantees should be provided with at least a tractable algorithm to implement it in practice. 
+
+
+Our theoretical understanding of many classical procedures of machine learning such as LASSO heavily rely on two assumptions on the data, that should both be i.i.d. and have nice sub-gaussian behaviors. As noted by many practitioners, ``data from real-world experiments oftentimes tend to be corrupted with outliers and/or exhibit heavy tails". For example, in finance, heavy-tailed processes are routinely used and, in biology or medical experiments datasets are regularly subject to some corruption by outliers. These outliers are even in some applications the data of actual interests, one can think of fraud detections for example. The need for robust procedures in data science can be appreciated, for instance, by the recently posted challenges on ``kaggle'', the most popular data science competition platform. The 1.5 million dollars problem ``Passenger Screening Algorithm Challenge'' is about to find terrorist activity from 3D images. The ``NIPS 2017: Defense Against Adversarial Attack'' is about constructing algorithms robust to adversarial data.
+
+
+
+It is easy to check that most routinely used algorithms are absolutely non-robust to the presence of even one outlier. This is the case of the standard least-squares estimator or its ell_1 penalized version known as LASSO for example as one can see on basic simulations just by adding a single outlier to a dataset. LASSO is not an isolated example, most algorithms are actually designed to approximate minimizers of penalized empirical loss and empirical means of unbounded functions are highly sensitive to corrupted data. 
+Even though in statistics, building robust estimators has been an issue for a long time, at least since the work of John Tukey, Frank Hampel and Peter Huber, this question has not been satisfactorily answered yet.
+
+In a recent paper (cf. [1]), we proved that a learning procedure using a Median of Means (MOM) approach completely solved the robustness problem in Machine Learning.  Most surprisingly is that this procedure comes with an algorithm: it is some sort of alternating minimaximization block gradient descent algorithm where the block of data along which the iteration is descending (or ascending) is chosen according to its "centrality" (measured via a  median operator). We have been running our algorithms on simulated datasets for various regression and classification problems in high-dimensions. The robustness of these procedures and there ability to detect outliers are amazing.
+
+We have been constructing MOM versions of very classical Deep learning networks like CNN and MLP. We compared the robustness of these new MOM procedures to the one of the classical deep learning architectures (via keras). Once again the MOM version the CNN are very robust to various sort of outliers whereas the classical CNN architecture are not robust. Moreover our algorithm is twice faster than the equivalent keras one (same number of layers and neurons). We obtained the following classification results: 1) MOM CNN ran in 615 seconds with  95 per cent of exact classifications whereas 2) CNN (keras) ran in 1257 seconds for a  51 per cent classification rate success. We learned the robust architectures resulting from our algorithm on the tiny-imagenet database which is 10.000 times smaller than the actual imagenet database. 
+
+If our Nvidia grant application works, we will be using the GPU to construct robust deep learning architectures at first on the imagenet database. The aim is to be robust to various corruptions of images and to wrong labeling. We therefore apply for the Nvidia GPU grant for research purposes for our team. 
+
+Our team working on MOM estimators is just at its beginning (our main result was obtained in January 2017). It is made for the moment of two researchers (G. Lecue and M. Lerasle) and two Ph.D. students (G. Chinot and T. Mathieu). We will use the GPU together with TensorFlow and share it among the team. The results we will get will be used to write research articles and to support future grant applications at both national and European levels.
+
+
+
+- list of recent publications:
+[1] G. Lecué and M. Lerasle
+Robust learning from MOM’s principles: theory and practice
+Under preparation, 2017.
+
+G. Lecué and M. Lerasle
+Learning from MOM’s principles: Le Cam’s approach
+Submitted, 2017.
+
+S. Foucart and G. Lecué
+An IHT algorithm for sparse recovery from subexponential measurements
+IEEE Signal Processing Letters (9) 24, 2017.
+
+G. Lecué and S. Mendelson
+Regularization and the small-ball method II: complexity dependent error rates
+Under revision in JMLR, 2016.
+
+G. Lecué and S. Mendelson
+Regularization and the small-ball method I: sparse recovery
+To appear in the Annals of Statistics, 2016.
