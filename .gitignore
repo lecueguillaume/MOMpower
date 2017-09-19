@@ -8,6 +8,9 @@
 *.toc
 *.fmt
 
+## Notebook
+*.ipynb_checkpoints/
+
 ## Intermediate documents:
 *.dvi
 *-converted-to.*
