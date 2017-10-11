@@ -11,6 +11,7 @@ os.mkdir('dataset')
 os.mkdir('dataset/test')
 os.mkdir('dataset/train')
 os.mkdir('dataset/test_resized')
+os.mkdir('dataset/eval')
 
 def _progress(count, block_size, total_size):
     sys.stdout.write('\r>> Downloading %s %.1f%%' % ("dataset/tiny.zip",
