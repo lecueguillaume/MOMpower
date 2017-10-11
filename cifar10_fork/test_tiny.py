@@ -11,6 +11,7 @@ os.mkdir('dataset')
 os.mkdir('dataset/test')
 os.mkdir('dataset/train')
 os.mkdir('dataset/test_resized')
+os.mkdir('dataset/eval')
 
 def _progress(count, block_size, total_size):
     sys.stdout.write('\r>> Downloading %s %.1f%%' % ("dataset/tiny.zip",
@@ -54,7 +55,7 @@ df2['class']=np.zeros(len(df2))
 df2.to_csv('dataset/sample_submission.csv')
 shutil.rmtree('dataset/tiny-imagenet-200')
 #On fait que tester et donc faire une évaluation
-print('dataset créé, formattage pour que les fichiers soient comme il faut.')
+print('dataset créé, formattage pour que les fichiers soient comme il faut. Ça prend beaucoup de temps surtout quand il y a beaucoup de petites images comme dans le tiny dataset.')
 
 os.system("python3 prepare_cifar10.py")
 

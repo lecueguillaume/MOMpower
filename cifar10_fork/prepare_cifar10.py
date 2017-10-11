@@ -57,6 +57,9 @@ for f in range(len(train_files)):
     filename=train_files[f]
     im=imread(filename)
     im=imresize(im,size)
+    
+    class_name = ytrain[f]
+    data.append(class_name)
     if len(np.shape(im))<3:
         print('une des images est en noir et blanc')
  
@@ -72,9 +75,7 @@ for f in range(len(train_files)):
                     data.append(im[x,y,color])
 
 
-    class_name = ytrain[f]
 
-    data.append(class_name)
     
     
 output_file = open('dataset/train.bin', 'wb')

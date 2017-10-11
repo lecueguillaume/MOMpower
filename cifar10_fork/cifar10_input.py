@@ -30,7 +30,11 @@ import tensorflow as tf
 IMAGE_SIZE = 50
 
 # Global constants describing the CIFAR-10 data set.
-NUM_CLASSES = 120
+import pandas as pd
+df=pd.read_csv('dataset/labels.csv')
+import numpy as np
+
+NUM_CLASSES =len(np.unique(df['labels']))
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 5000
 NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 1000
 
