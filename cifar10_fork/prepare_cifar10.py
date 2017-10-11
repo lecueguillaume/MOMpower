@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.misc import imread,imsave
 from scipy.misc import imresize
+from matplotlib.pyplot import imshow
+import matplotlib.pyplot as plt
 import pandas as pd
 import glob
 import pickle
@@ -48,20 +50,33 @@ eval_y=np.array(ytrain)[evaluation]
 train_files=np.array(train_files)[train]
 ytrain=np.array(ytrain_num)[train]
 
+ids_eval=np.array(ids_train)[evaluation]
+ids_train=np.array(ids_train)[train]
+
 for f in range(len(train_files)):
     filename=train_files[f]
     im=imread(filename)
     im=imresize(im,size)
-    
+    if len(np.shape(im))<3:
+        print('une des images est en noir et blanc')
+ 
+        for color in range(0,3):
+            for x in range(0,64):
+                for y in range(0,64):
+                    data.append(im[x,y])
+
+    else:
+        for color in range(0,3):
+            for x in range(0,64):
+                for y in range(0,64):
+                    data.append(im[x,y,color])
+
+
     class_name = ytrain[f]
 
     data.append(class_name)
-
-    for color in range(0,3):
-        for x in range(0,64):
-            for y in range(0,64):
-                data.append(im[x,y,color])
-
+    
+    
 output_file = open('dataset/train.bin', 'wb')
 data.tofile(output_file)
 output_file.close()
@@ -75,13 +90,20 @@ for f in range(len(eval_files)):
     class_name = ytrain[f]
 
     data.append(class_name)
+    if len(np.shape(im))<3:
+        print('une des images est en noir et blanc')
+ 
+        for color in range(0,3):
+            for x in range(0,64):
+                for y in range(0,64):
+                    data.append(im[x,y])
 
-    for color in range(0,3):
-        for x in range(0,64):
-            for y in range(0,64):
-                data.append(im[x,y,color])
-
-
+    else:
+        for color in range(0,3):
+            for x in range(0,64):
+                for y in range(0,64):
+                    data.append(im[x,y,color])
+  
 
 
 for f in range(len(eval_files)):

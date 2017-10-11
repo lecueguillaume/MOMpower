@@ -6,6 +6,12 @@ import zipfile
 import os
 import glob
 import numpy as np
+
+os.mkdir('dataset')
+os.mkdir('dataset/test')
+os.mkdir('dataset/train')
+os.mkdir('dataset/test_resized')
+
 def _progress(count, block_size, total_size):
     sys.stdout.write('\r>> Downloading %s %.1f%%' % ("dataset/tiny.zip",
       float(count * block_size) / float(total_size) * 100.0))
