@@ -48,29 +48,24 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('train_dir', '/tmp/cifar10_train',
                            """Directory where to write event logs """
                            """and checkpoint.""")
-tf.app.flags.DEFINE_integer('max_steps', 10000,
+tf.app.flags.DEFINE_integer('max_steps', 50000,
                             """Number of batches to run.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
-tf.app.flags.DEFINE_integer('log_frequency', 10,
+tf.app.flags.DEFINE_integer('log_frequency', 100,
                             """How often to log results to the console.""")
 
 import os
 import pandas
-K=7
-KSD=4
+K=3
 import numpy as np
 
-def blockMOM(K,x,sigma):
-  blocks=tf.split(sigma, K)
-  return [tf.gather(x,block) for block in blocks]
 
-def MOM(x,blocks):
-  means_blocks=tf.reduce_mean(blocks,1)
-  risk,indice=tf.nn.top_k(means_blocks,k=KSD,sorted=True)
-  indice=indice[-1]
+def MOM(x):
 
-  return indice
+    means_blocks=[np.mean(xx ) for xx in x]
+    indice=np.argsort(means_blocks)[int(np.floor(len(means_blocks)/2))]
+    return indice
 
 def train():
   """Train CIFAR-10 for a number of steps."""
@@ -80,28 +75,29 @@ def train():
     # Get images and labels for CIFAR-10.
     # Force input pipeline to CPU:0 to avoid operations sometimes ending up on
     # GPU and resulting in a slow down.
+
+    
+    images2=tf.placeholder(tf.float32,(FLAGS.batch_size,24,24,3),name='input_images')
+    labels2=tf.placeholder(tf.int32,(FLAGS.batch_size),name='input_labels')
+
+    logits2=cifar10.inference(images2)
+    loss=cifar10.loss(logits2,labels2)
+    train_op = cifar10.train(loss, global_step)
+
+
     with tf.device('/cpu:0'):
       images, labels = cifar10.distorted_inputs()
 
     # Build a Graph that computes the logits predictions from the
     # inference model.
-    logits = cifar10.inference(images)
+    logits = cifar10.inference_reuse(images)
 
     # Calculate loss.
     losses = cifar10.loss1(logits, labels)
-    sigma=tf.placeholder(tf.int32,shape=(None))
-    
-    blocks=blockMOM(K,losses,sigma)
 
-    indice=MOM(losses,blocks)
-
-    block_loss=tf.gather(blocks,indice)
-    cross_entropy_mean=tf.reduce_mean(block_loss, name='cross_entropy')
-    loss=cifar10.loss2(cross_entropy_mean)
 
     # Build a Graph that trains the model with one batch of examples and
     # updates the model parameters.
-    train_op = cifar10.train(loss, global_step)
 
     class _LoggerHook(tf.train.SessionRunHook):
       """Logs loss and runtime."""
@@ -140,15 +136,29 @@ def train():
           df.to_csv('log_cifar.csv',index=False)
 
     with tf.train.MonitoredTrainingSession(
+            save_checkpoint_secs=300,
         checkpoint_dir=FLAGS.train_dir,
         hooks=[tf.train.StopAtStepHook(last_step=FLAGS.max_steps),
                tf.train.NanTensorHook(loss),
                _LoggerHook()],
         config=tf.ConfigProto(
             log_device_placement=FLAGS.log_device_placement)) as mon_sess:
+      imagemom=np.zeros([FLAGS.batch_size,24,24,3])
+      lblmom=np.zeros(FLAGS.batch_size)
+      cost=mon_sess.run([loss],feed_dict={images2:imagemom, labels2:lblmom})
       while not mon_sess.should_stop():
-        sigmas=np.random.permutation(FLAGS.batch_size)
-        mon_sess.run(train_op,feed_dict={sigma:sigmas })
+        lossbs=[]
+        ibs=[]
+        lblbs=[]
+        for k in range(K):
+            lossb,ib,lblb=mon_sess.run([losses,images,labels],feed_dict={images2:imagemom, labels2:lblmom })
+            lossbs+=[lossb]
+            ibs+=[ib]
+            lblbs+=[lblb]
+        ind=MOM(lossbs)
+        imagemom=ibs[ind]
+        lblmom=lblbs[ind]
+        mon_sess.run([train_op],feed_dict={images2:imagemom, labels2:lblmom})
 
 
 def main(argv=None):  # pylint: disable=unused-argument
