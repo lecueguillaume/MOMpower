@@ -3,6 +3,8 @@ from scipy.misc import imread
 import tensorflow as tf
 import os
 import time
+import glob
+
 
 
 class progressbar():
@@ -16,6 +18,18 @@ class progressbar():
             print('\r'+"["+"-"*percent+' '*(100-percent)+']', end='')
         else:
             print('\r'+"["+"-"*percent+' '*(100-percent)+']')
+
+def variable_summaries(var,name):
+  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+  with tf.name_scope('summaries_'+name):
+    mean = tf.reduce_mean(var)
+    tf.summary.scalar('mean', mean)
+    with tf.name_scope('stddev'):
+      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+    tf.summary.scalar('stddev', stddev)
+    tf.summary.scalar('max', tf.reduce_max(var))
+    tf.summary.scalar('min', tf.reduce_min(var))
+    tf.summary.histogram('histogram', var)
 
 class CNN():
 
@@ -85,8 +99,7 @@ class CNN():
 
     '''
 
-    def __init__(self,channels=[32,64],filter_shape=[5,5],pool_shape=[2,2],final_layer_shape=1000,learning_rate=1e-3,beta=1e-4,epochs=100,batch_size = 1000,stddev=0.01,regex=False,save_file='graph_cnn.tf',epoch_count=50,num_classes=None):
-        
+    def __init__(self,channels=[32,64],filter_shape=[5,5],pool_shape=[2,2],final_layer_shape=1000,learning_rate=1e-3,beta=1e-4,epochs=100,batch_size = 1000,stddev=0.01,regex=False,save_file='graph_cnn.tf',epoch_count=50,num_classes=None,tensorboard_file='tensorboard_logs'):
         self.learning_rate=learning_rate
         self.beta=beta
         self.epochs=epochs
@@ -101,6 +114,7 @@ class CNN():
         self.epoch_count=epoch_count
         self.num_classes=num_classes
         self.values=[]
+        self.tb_file=tensorboard_file
         
     def fit(self,input_files_train,y_train):
         """
@@ -108,6 +122,12 @@ class CNN():
         else, the input_files_train and input_files_test are supposed to be the 2D matrices of the samples.
         y_train is supposed to be a 1D array containing the labels.
         """
+
+        if os.path.exists(self.tb_file+"/CNN"):
+            for filename in glob.glob(self.tb_file+'/CNN/*'):
+                os.remove(filename)
+            os.rmdir(self.tb_file+'/CNN')
+       
 
         tf.reset_default_graph()
         gen_tensor=self.distort_input(input_files_train)
@@ -136,6 +156,8 @@ class CNN():
             L+= [layer]
             W+=[w]
             B+=[b]
+            variable_summaries(w,'Conv_weight_'+str(i))
+            variable_summaries(b,'Conv_bias_'+str(i))
         
         flattened=tf.contrib.layers.flatten(L[-1])
 
@@ -147,11 +169,15 @@ class CNN():
         n=int(self.channels[-1]*n**2)
         wf1 = tf.Variable(tf.truncated_normal([n, self.final_layer_shape], stddev=self.stddev), name='wf1')
         bf1 = tf.Variable(tf.truncated_normal([self.final_layer_shape], stddev=self.stddev), name='bf1')
+        variable_summaries(wf1,'dense_weight_1')
+        variable_summaries(bf1,'dense_bias_1')
         dense_layer1 = tf.matmul(flattened, wf1) + bf1
         dense_layer1 = tf.nn.relu(dense_layer1)
 
         wf2 = tf.Variable(tf.truncated_normal([self.final_layer_shape, self.num_classes], stddev=self.stddev), name='wf2')
+        variable_summaries(wf2,'dense_weight_2')
         bf2 = tf.Variable(tf.truncated_normal([self.num_classes], stddev=self.stddev), name='bf2')
+        variable_summaries(bf2,'dense_bias_2')
         dense_layer2 = tf.matmul(dense_layer1, wf2) + bf2
 
         y_ = tf.nn.softmax(dense_layer2)
@@ -160,30 +186,39 @@ class CNN():
             perte=tf.add(perte,self.beta*tf.nn.l2_loss(W[i]))
 
         cross_entropy = tf.reduce_mean(perte)
+        tf.summary.scalar('Cross_entropy', cross_entropy)
+
 
         optimiser = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(cross_entropy)
         #print(tf.all_variables())
         saver = tf.train.Saver(W+B+[wf1,wf2,bf1,bf2])
         init_op = tf.global_variables_initializer()
+        merged = tf.summary.merge_all()
+
         with tf.Session() as sess:
+            train_writer = tf.summary.FileWriter(self.tb_file+'/CNN',
+                                      sess.graph)
             sess.run(init_op)
             # Training
             a=time.time()
+            generator_x=self.generate_image(input_files_train,self.batch_size)
             for epoch in range(self.epochs):
-                generator_x=self.generate_image(input_files_train,self.batch_size)
+                
                 cost = []
                 batch=0
-                for images in generator_x:
-                    batch_x=sess.run(gen_tensor,feed_dict={self.image: images})
-                    if ((batch+1)*self.batch_size) < len(labels):
-                        batch_y=labels[(self.batch_size*batch):(self.batch_size*(batch+1))]
-                    else:
-                        batch_y=labels[(self.batch_size*batch):]
-                    batch+=1
-
-                    _, c = sess.run([optimiser, cross_entropy],
+                
+                Xs=[]
+                losses=[]
+                indices=[]
+                images,inds=generator_x.__next__()
+                batch_x=sess.run(gen_tensor,feed_dict={self.image: images})
+                batch_y=labels[inds]
+                
+                _, c,summary = sess.run([optimiser, cross_entropy,merged],
                                   feed_dict={x: batch_x, y: batch_y})
-                    cost += [c]
+                train_writer.add_summary(summary, epoch)
+
+                cost += [c]
                 if epoch % self.epoch_count ==0:
                     print("Epoch:", (epoch+1 ), "cost =", "{:.3f}".format(np.mean(cost)),' en environ ',(time.time()-a),'s')
 
@@ -222,7 +257,7 @@ class CNN():
 
 
         tf.reset_default_graph()
-        gen_tensor=self.distort_input(input_files_test)
+        gen_tensor=self.distort_input(input_files_test,True)
 
         if self.regex:
             filepaths=glob.glob(input_files_test)
@@ -341,7 +376,7 @@ class CNN():
             return [v for v in y]
 
 
-    def distort_input(self,images_filepath):
+    def distort_input(self,images_filepath,test=False):
         if self.regex:
             filepaths=glob.glob(images_filepath)
         else:
@@ -358,57 +393,84 @@ class CNN():
         IMAGE_SIZE=self.IMAGE_SIZE
         height = IMAGE_SIZE
         width = IMAGE_SIZE
-
-        filenames = []
-        idx = 0
-        self.image= tf.placeholder(tf.float32, [None,np.shape(image1)[0],np.shape(image1)[1],3])
-        distorted_image = tf.map_fn(lambda img: tf.random_crop(img, [height, width,3]),self.image)
-
-        # Randomly flip the image horizontally.
-        distorted_image = tf.map_fn(lambda dist_img : tf.image.random_flip_left_right(dist_img),distorted_image)
-
-        # Because these operations are not commutative, consider randomizing
-        # the order their operation.
-        # NOTE: since per_image_standardization zeros the mean and makes
-        # the stddev unit, this likely has no effect see tensorflow#1458.
-        distorted_image = tf.map_fn(lambda dist_img: tf.image.random_brightness(dist_img,max_delta=63),distorted_image)
-        distorted_image = tf.map_fn(lambda dist_img: tf.image.random_contrast(dist_img,
-                                                 lower=0.2, upper=1.8),distorted_image)
-
-        # Subtract off the mean and divide by the variance of the pixels.
-        float_image = tf.map_fn(lambda dist_img: tf.image.per_image_standardization(dist_img),distorted_image)
-
-        images=tf.contrib.layers.flatten(float_image)
         
-        return images
+
+        if not test:
+            self.image= tf.placeholder(tf.float32, [None,np.shape(image1)[0],np.shape(image1)[1],3])
+            distorted_image = tf.map_fn(lambda img: tf.random_crop(img, [height, width,3]),self.image)
+
+            # Randomly flip the image horizontally.
+            distorted_image = tf.map_fn(lambda dist_img : tf.image.random_flip_left_right(dist_img),distorted_image)
+
+            # Because these operations are not commutative, consider randomizing
+            # the order their operation.
+            # NOTE: since per_image_standardization zeros the mean and makes
+            # the stddev unit, this likely has no effect see tensorflow#1458.
+            distorted_image = tf.map_fn(lambda dist_img: tf.image.random_brightness(dist_img,max_delta=63),distorted_image)
+            distorted_image = tf.map_fn(lambda dist_img: tf.image.random_contrast(dist_img,
+                                                     lower=0.2, upper=1.8),distorted_image)
+
+            # Subtract off the mean and divide by the variance of the pixels.
+            float_image = tf.map_fn(lambda dist_img: tf.image.per_image_standardization(dist_img),distorted_image)
+
+            images=tf.contrib.layers.flatten(float_image)
+            
+            return images
+        else:
+
+            self.image= tf.placeholder(tf.float32, [None,np.shape(image1)[0],np.shape(image1)[1],3])
+            images=tf.image.resize_images(self.image,[height,width])
+
+            images = tf.map_fn(lambda img: tf.image.per_image_standardization(img),images)
+            images=tf.contrib.layers.flatten(images)
+
+            return images
     def generate_image(self,input_files,batch_size=None,test=False):
+        
         if self.regex:
             filepaths=glob.glob(input_files)
         else:
             filepaths=input_files
         if test:
             batch_size=len(filepaths)
-        images=np.zeros([np.min([len(filepaths),batch_size]),self.im_h,self.im_w,3])
 
         idx=0
-        batch=0
-        for filepath in filepaths:
-            image = imread(filepath).astype(np.float)
-            if len(np.shape(image))==3:
-                images[idx,:,:,:]=image
-                idx += 1
-            else:
-                if test:
-                    print('one of the test sample is not 3D')
-                    images[idx,:,:,0]=image
-                    images[idx,:,:,1]=image
-                    images[idx,:,:,2]=image
-            if idx == batch_size:
-                yield  images
-                batch+=1
-                images=np.zeros([np.min([len(filepaths)-batch*batch_size,batch_size]),self.im_h,self.im_w,3])
-                idx = 0
-        if idx > 0:
+        if not test:
+            inds=[]
+            while True:
+                images=np.zeros([batch_size,self.im_h,self.im_w,3])
+                for _ in range(batch_size):
+                    ind=int(np.random.uniform()*len(filepaths))
+                    inds+=[ind]
+                    image = imread(filepaths[ind]).astype(np.float)
+                    if len(np.shape(image))==3:
+                        images[idx,:,:,:]=image
+                        idx += 1
+                    else:
+                        if test:
+                            print('one of the test sample is not 3D')
+                            images[idx,:,:,0]=image
+                            images[idx,:,:,1]=image
+                            images[idx,:,:,2]=image
+                        idx+=1
+                    if idx == batch_size:
+                        yield  images,inds
+                        idx = 0
+                        inds=[]
+        else:
+            images=np.zeros([len(filepaths),self.im_h,self.im_w,3])
+            for filepath in filepaths:
+                image = imread(filepath).astype(np.float)
+                if len(np.shape(image))==3:
+                    images[idx,:,:,:]=image
+                    idx += 1
+                else:
+                    if test:
+                        print('one of the test sample is not 3D')
+                        images[idx,:,:,0]=image
+                        images[idx,:,:,1]=image
+                        images[idx,:,:,2]=image
+
             yield  images
 
 
